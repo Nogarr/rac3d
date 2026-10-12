@@ -35,7 +35,8 @@ export function updateAnalog(dt) {
   if (input.steerTouch !== null) {
     input.steer = input.steerTouch
   } else {
-    const t = (input.keyRight ? 1 : 0) - (input.keyLeft ? 1 : 0)
+    // con teclado el manubrio llega al 78 %: cerca del límite sin pasarlo
+    const t = ((input.keyRight ? 1 : 0) - (input.keyLeft ? 1 : 0)) * 0.78
     const rate = t === 0 ? 7 : 4.5
     input.steer += Math.max(-rate * dt, Math.min(rate * dt, t - input.steer))
   }

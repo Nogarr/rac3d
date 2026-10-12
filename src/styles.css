@@ -97,6 +97,27 @@ button:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
 .warn { background: var(--curb); color: var(--chalk); }
 .toast.show, .warn.show { opacity: 1; }
 
+/* inclinación en grados: se pone ámbar y roja al acercarse al límite */
+.gauge-lean { font-size: clamp(11px, 3.2vmin, 15px); font-weight: 700; color: var(--steel); letter-spacing: 0.04em; }
+.gauge-lean.warm { color: var(--amber); }
+.gauge-lean.hot { color: var(--curb); }
+
+/* modo escape: estado + barra de evasión + radar (reemplaza a posición/vuelta) */
+.hud-chase { display: none; }
+.hud.mode-chase .hud-race { display: none; }
+.hud.mode-chase .hud-chase {
+  position: absolute; top: var(--top); left: var(--left);
+  display: grid; gap: 1vmin; justify-items: start;
+}
+.chase-status {
+  font-family: var(--display); font-size: clamp(16px, 5.4vmin, 30px); line-height: 1; color: var(--go);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+}
+.hud-chase.seen .chase-status { color: var(--curb); }
+.chase-bar { width: clamp(70px, 22vmin, 140px); height: clamp(4px, 1.1vmin, 7px); background: rgba(255, 255, 255, 0.2); border-radius: 4px; overflow: hidden; }
+.chase-bar i { display: block; height: 100%; background: var(--go); transform-origin: left; transform: scaleX(0); }
+.radar { width: clamp(64px, 20vmin, 120px); height: clamp(64px, 20vmin, 120px); }
+
 /* extras de escritorio: ocultos por defecto */
 .hud-desk { display: none; }
 
@@ -205,6 +226,44 @@ tr.me td { background: rgba(255, 176, 0, 0.16); color: var(--amber); }
   background: var(--chalk); color: #121418; font-weight: 800; border-left: 4px solid var(--c);
 }
 .foot { margin: 0; color: var(--steel); font-size: 0.85rem; }
+
+
+/* ---------- menú: modo y moto ---------- */
+.menu-panel { max-width: min(640px, 100%); }
+.title { white-space: nowrap; font-size: clamp(36px, 11vmin, 84px); }
+.seg { display: inline-flex; justify-self: start; border: 2px solid rgba(255, 255, 255, 0.25); }
+.seg-btn {
+  background: transparent; border: 0; padding: 0.35em 1.1em; min-height: 40px;
+  font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; font-size: clamp(13px, 3.8vmin, 16px); color: var(--steel);
+}
+.seg-btn.on { background: var(--chalk); color: var(--navy); }
+.meta.small { font-size: clamp(12px, 3.4vmin, 15px); color: var(--chalk); }
+.bikes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(6px, 1.6vmin, 10px); }
+.bike-card {
+  display: grid; gap: 3px; align-content: start; text-align: left; padding: 8px 10px 9px;
+  background: rgba(16, 21, 40, 0.72); border: 2px solid rgba(255, 255, 255, 0.14); border-top: 4px solid var(--c);
+  min-width: 0;
+}
+.bike-card.on { border-color: var(--amber); border-top-color: var(--c); background: rgba(30, 38, 66, 0.92); }
+.bike-name { font-family: var(--display); font-size: clamp(14px, 4.2vmin, 20px); line-height: 1.05; }
+.bike-spec { font-size: clamp(10px, 2.9vmin, 12.5px); color: var(--steel); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.bike-bars { display: grid; gap: 3px; margin-top: 3px; }
+.bar-row { display: grid; grid-template-columns: 4.6em 1fr; align-items: center; gap: 6px; }
+.bar-row small { font-size: clamp(9px, 2.6vmin, 11px); color: var(--steel); letter-spacing: 0.06em; text-transform: uppercase; }
+.bar-row i { display: block; height: 4px; background: linear-gradient(90deg, var(--c) calc(var(--v) * 100%), rgba(255, 255, 255, 0.12) 0); }
+.chase-result.escaped .title-sm { color: var(--go); }
+.chase-result.busted .title-sm { color: var(--curb); }
+.facts { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, auto)); gap: 8px 22px; }
+.facts div { display: grid; gap: 1px; border-top: 2px solid rgba(255, 255, 255, 0.15); padding-top: 5px; }
+.facts dt { font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--steel); font-weight: 600; }
+.facts dd { margin: 0; font-size: 1.15rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px), (max-height: 330px) and (max-width: 700px) {
+  .bikes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-height: 430px) {
+  .bike-bars { display: none; }
+  .keys { display: none; }
+}
 
 /* Pantallas bajas (celular apaisado): todo más compacto */
 @media (max-height: 460px) {

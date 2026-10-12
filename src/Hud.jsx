@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { input } from './input'
-import { LAPS, standings, fmtTime } from './game'
+import { LAPS, standings } from './race'
+import { fmtTime } from './shared'
 import { centerline, bounds, S0, sample } from './track'
 
 // HUD mínimo: posición, vuelta, marcha (con su color hace de luz de cambio),
@@ -75,10 +76,60 @@ function drawMap(race) {
 let tAcc = 0
 let mapAcc = 0
 let blink = 0
-export function updateHud(race, dt) {
-  const p = race.player
+function drawRadar(st) {
+  const c = hud.radar
+  if (!c || !c.offsetParent) return
+  const ctx = c.getContext('2d')
+  const w = c.width
+  const R = w / 2
+  const p = st.player
+  ctx.clearRect(0, 0, w, w)
+  ctx.fillStyle = 'rgba(16,21,40,0.55)'
+  ctx.beginPath()
+  ctx.arc(R, R, R - 1, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'
+  ctx.lineWidth = w / 90
+  ctx.beginPath()
+  ctx.arc(R, R, R * 0.5, 0, Math.PI * 2)
+  ctx.stroke()
+  const range = 220
+  const cs = Math.cos(p.yaw)
+  const sn = Math.sin(p.yaw)
+  const blinkOn = Math.floor(st.time * 6) % 2 === 0
+  for (const c2 of st.police) {
+    if (!c2.active) continue
+    const dx = c2.x - p.x
+    const dz = c2.z - p.z
+    // adelante = arriba
+    const fwd = dx * sn + dz * cs
+    const right = dx * -cs + dz * sn
+    let x = -right / range
+    let y = -fwd / range
+    const m = Math.hypot(x, y)
+    if (m > 0.92) {
+      x *= 0.92 / m
+      y *= 0.92 / m
+    }
+    ctx.fillStyle = c2.seesPlayer ? (blinkOn ? '#ff3b30' : '#3b7bff') : '#9aa2b6'
+    ctx.beginPath()
+    ctx.arc(R + x * R, R + y * R, w / 16, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.fillStyle = '#ffb000'
+  ctx.beginPath()
+  ctx.moveTo(R, R - w / 11)
+  ctx.lineTo(R - w / 18, R + w / 18)
+  ctx.lineTo(R + w / 18, R + w / 18)
+  ctx.closePath()
+  ctx.fill()
+}
+
+export function updateHud(st, dt) {
+  const p = st.player
   blink += dt
-  const grid = race.phase === 'grid'
+  const grid = st.phase === 'grid'
+  const chase = st.mode === 'chase'
 
   setText(hud.speed, String(Math.round(p.v * 3.6)))
   setText(hud.gear, grid && !p.throttle ? 'N' : String(p.gear))
@@ -90,38 +141,55 @@ export function updateHud(race, dt) {
   setClass(hud.gearBox, 'shift', !grid && rpm > 0.86 && !cut)
   setClass(hud.gearBox, 'cut', cut && flash)
 
-  setText(hud.pos, String(standings(race).indexOf(p) + 1))
-  setText(hud.lap, String(Math.min(LAPS, Math.max(1, p.lapIdx + 1))))
-  setText(hud.time, fmtTime(grid ? 0 : race.time))
-  setText(hud.best, isFinite(p.bestLap) ? fmtTime(p.bestLap) : '—')
+  // ángulo de inclinación y cercanía al límite de agarre
+  const deg = Math.round(Math.abs(p.crash > 0 ? 0 : p.lean) * 57.3)
+  setText(hud.lean, deg + '°')
+  const ratio = Math.abs(p.lean) / Math.max(0.05, p.limitNow || 1)
+  setClass(hud.lean, 'warm', p.crash <= 0 && ratio > 0.75 && ratio <= 0.92)
+  setClass(hud.lean, 'hot', p.crash <= 0 && ratio > 0.92)
+
+  if (chase) {
+    const ev = Math.min(1, st.evade)
+    if (hud.evade) hud.evade.style.transform = `scaleX(${ev.toFixed(3)})`
+    setText(hud.status, st.result === 'escaped' ? 'LIBRE' : st.seen ? 'TE VEN' : 'EVADIENDO')
+    setClass(hud.statusBox, 'seen', st.seen && !st.result)
+    drawRadar(st)
+  } else {
+    setText(hud.pos, String(standings(st).indexOf(p) + 1))
+    setText(hud.lap, String(Math.min(LAPS, Math.max(1, p.lapIdx + 1))))
+    setText(hud.time, fmtTime(grid ? 0 : st.time))
+    setText(hud.best, isFinite(p.bestLap) ? fmtTime(p.bestLap) : '—')
+  }
 
   // un solo aviso a la vez, solo cuando importa
   let warn = ''
-  if (!grid && !p.finished && p.crash <= 0) {
-    if (p.frontLoad > 0.2) warn = 'SOLTÁ EL DELANTERO'
-    else if (p.offroad) warn = 'GRAVA'
+  if (!grid && !p.finished && p.crash <= 0 && !st.result) {
+    if (chase && st.bust > 0.05) warn = 'TE ESTÁN ACORRALANDO · ' + Math.round(st.bust * 100) + '%'
+    else if (p.slide > 0.15) warn = p.front ? '¡SOLTÁ EL DELANTERO!' : '¡PATINA! ENDEREZÁ'
+    else if (p.offroad && !chase) warn = 'GRAVA'
   }
   setText(hud.warn, warn)
   setClass(hud.warn, 'show', warn !== '')
 
   let count = ''
-  if (race.running && grid && race.countdown <= 3) count = String(Math.ceil(race.countdown))
-  if (race.phase === 'race' && race.time < 0.9) count = '¡YA!'
+  if (st.running && grid && st.countdown <= 3) count = String(Math.ceil(st.countdown))
+  if (st.phase === 'race' && st.time < 0.9) count = '¡YA!'
   setText(hud.count, count)
   setClass(hud.count, 'go', count === '¡YA!')
 
-  setText(hud.toast, race.toast.t > 0 ? race.toast.text : '')
-  setClass(hud.toast, 'show', race.toast.t > 0 && warn === '')
+  setText(hud.toast, st.toast.t > 0 ? st.toast.text : '')
+  setClass(hud.toast, 'show', st.toast.t > 0 && warn === '')
 
   if (hud.bar) hud.bar.style.transform = `rotate(${(input.steer * 26).toFixed(1)}deg)`
 
+  if (chase) return
   // extras de escritorio
   tAcc += dt
   if (tAcc > 0.25 && hud.rows[0]?.el?.offsetParent) {
     tAcc = 0
-    const st = standings(race)
-    const leader = st[0]
-    st.forEach((r, i) => {
+    const sd = standings(st)
+    const leader = sd[0]
+    sd.forEach((r, i) => {
       const row = hud.rows[i]
       if (!row) return
       setText(row.num, String(r.num))
@@ -129,7 +197,7 @@ export function updateHud(race, dt) {
       let gap = ''
       if (i === 0) gap = grid ? '' : `V${Math.min(LAPS, Math.max(1, r.lapIdx + 1))}`
       else if (r.finished && leader.finished) gap = '+' + (r.finishTime - leader.finishTime).toFixed(1)
-      else gap = grid ? '' : '+' + ((leader.total - r.total) / Math.max(r.v, 30)).toFixed(1)
+      else gap = grid ? '' : '+' + ((leader.total - r.total) / Math.max(r.v, 20)).toFixed(1)
       setText(row.gap, gap)
       if (row.el) {
         row.el.style.setProperty('--c', r.color)
@@ -140,7 +208,7 @@ export function updateHud(race, dt) {
   mapAcc += dt
   if (mapAcc > 1 / 30) {
     mapAcc = 0
-    drawMap(race)
+    drawMap(st)
   }
 }
 
@@ -149,9 +217,14 @@ const rowRef = (i, key) => (e) => {
   hud.rows[i][key] = e
 }
 
-export function Hud({ visible, onPause }) {
+export function Hud({ visible, mode, onPause }) {
   return (
-    <div className={'hud' + (visible ? '' : ' is-hidden')}>
+    <div className={'hud' + (visible ? '' : ' is-hidden') + (mode === 'chase' ? ' mode-chase' : '')}>
+      <div className="hud-chase" ref={(e) => (hud.statusBox = e)}>
+        <span className="chase-status" ref={(e) => (hud.status = e)}>TE VEN</span>
+        <span className="chase-bar"><i ref={(e) => (hud.evade = e)} /></span>
+        <canvas className="radar" width={200} height={200} ref={(e) => (hud.radar = e)} />
+      </div>
       <div className="hud-race" aria-label="Posición y vuelta">
         <span className="pos">
           P<b ref={(e) => (hud.pos = e)}>4</b>
@@ -174,6 +247,7 @@ export function Hud({ visible, onPause }) {
         <span className="gauge-rpm" ref={(e) => (hud.rpmBox = e)}>
           <i ref={(e) => (hud.rpm = e)} />
         </span>
+        <span className="gauge-lean" ref={(e) => (hud.lean = e)}>0°</span>
       </div>
 
       <div className="hud-desk">

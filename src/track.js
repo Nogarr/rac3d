@@ -14,7 +14,7 @@ const CONTROL = [
   [170, 285], [70, 270],
 ]
 
-const SCALE = 1.3
+const SCALE = 1.0
 const curve = new THREE.CatmullRomCurve3(
   CONTROL.map(([x, z]) => new THREE.Vector3(x * SCALE, 0, z * SCALE)),
   true,
@@ -188,4 +188,50 @@ export function wallGeometry(off, height, uScale, flip) {
   g.setIndex(idx)
   g.computeVertexNormals()
   return g
+}
+
+// Proyecta un punto del mundo sobre el eje de la pista, buscando cerca de `hint`.
+export function project(x, z, hint, o = {}) {
+  let best = -1
+  let bd = Infinity
+  const scan = (from, to) => {
+    for (let k = from; k <= to; k++) {
+      const i = ((k % N) + N) % N
+      const dx = x - P[i * 2]
+      const dz = z - P[i * 2 + 1]
+      const d = dx * dx + dz * dz
+      if (d < bd) {
+        bd = d
+        best = i
+      }
+    }
+  }
+  if (hint == null || hint < 0) scan(0, N - 1)
+  else {
+    scan(hint - 30, hint + 30)
+    if (bd > 30 * 30) scan(0, N - 1)
+  }
+  const i = best
+  const tx = T[i * 2]
+  const tz = T[i * 2 + 1]
+  const dx = x - P[i * 2]
+  const dz = z - P[i * 2 + 1]
+  const along = dx * tx + dz * tz
+  o.idx = i
+  o.s = (((i * DS + along) % L) + L) % L
+  o.d = dx * -tz + dz * tx
+  o.tx = tx
+  o.tz = tz
+  o.rx = -tz
+  o.rz = tx
+  o.cx = P[i * 2] + tx * along
+  o.cz = P[i * 2 + 1] + tz * along
+  o.k = K[i]
+  return o
+}
+
+export function minRadius() {
+  let m = 0
+  for (let i = 0; i < N; i++) m = Math.max(m, Math.abs(K[i]))
+  return 1 / m
 }
