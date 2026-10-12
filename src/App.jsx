@@ -137,12 +137,12 @@ export default function App() {
   const p = race.current.player
   const inRace = phase === 'race' || phase === 'countdown'
   const gyroLabel = {
-    none: 'Sin sensor: inclinás el cuerpo con A / D o en modo asistido',
-    idle: 'Al largar se pide permiso al sensor de movimiento',
-    waiting: 'Leyendo el sensor…',
-    on: 'Giroscopio activo: inclinar el teléfono mueve tu cuerpo',
-    denied: 'Permiso de movimiento rechazado: cuerpo asistido',
-    nodata: 'Este navegador no entrega el sensor acá: cuerpo asistido',
+    none: 'Cuerpo: teclas A / D o asistido',
+    idle: 'Giroscopio: se activa al largar',
+    waiting: 'Giroscopio: leyendo…',
+    on: 'Giroscopio activo',
+    denied: 'Giroscopio sin permiso: cuerpo asistido',
+    nodata: 'Giroscopio no disponible acá: cuerpo asistido',
   }[gyroState]
 
   return (
@@ -156,55 +156,24 @@ export default function App() {
         <Scene key={raceKey} race={race} paused={pausedRef} onEvent={onEvent} phase={phaseRef} />
       </Canvas>
 
-      <Hud visible={inRace} />
+      <Hud visible={inRace && !paused} onPause={() => setPaused(true)} />
       <TouchControls visible={isTouch && inRace && !paused} />
-
-      {inRace && (
-        <div className="topbar">
-          <button type="button" className="chip" onClick={() => setPaused(true)} aria-label="Pausa">❚❚</button>
-          {gyroState === 'on' && (
-            <button type="button" className="chip" onClick={calibrate}>CENTRAR</button>
-          )}
-        </div>
-      )}
 
       {phase === 'menu' && (
         <section className="overlay menu">
           <div className="panel">
-            <p className="eyebrow">Fecha 7 · Campeonato Pampeano de Velocidad</p>
             <h1 className="title">Rueda<br />Libre</h1>
-            <dl className="facts">
-              <div><dt>Circuito</dt><dd>Las Toscas</dd></div>
-              <div><dt>Cuerda</dt><dd>{TRACK_KM} km</dd></div>
-              <div><dt>Carrera</dt><dd>{LAPS} vueltas</dd></div>
-              <div><dt>Largás</dt><dd>4º · #77</dd></div>
-            </dl>
-            {isTouch ? (
+            <p className="meta">Las Toscas · {TRACK_KM} km · {LAPS} vueltas · largás 4º</p>
+            {!isTouch && (
               <ul className="keys">
-                <li><b>Manubrio</b> deslizá el pulgar izquierdo</li>
-                <li><b>Cuerpo</b> inclinás el teléfono</li>
-                <li><b>Cambios</b> ▲ ▼ a mano</li>
-                <li><b>Frenos</b> DEL fuerte, TRAS seguro en curva</li>
-              </ul>
-            ) : (
-              <ul className="keys">
-                <li><kbd>↑</kbd> acelerar</li>
+                <li><kbd>↑</kbd> gas</li>
                 <li><kbd>←</kbd><kbd>→</kbd> manubrio</li>
                 <li><kbd>A</kbd><kbd>D</kbd> cuerpo</li>
-                <li><kbd>Z</kbd><kbd>X</kbd> bajar / subir cambio</li>
-                <li><kbd>↓</kbd> freno delantero</li>
-                <li><kbd>Espacio</kbd> freno trasero</li>
-                <li><kbd>P</kbd> pausa · <kbd>R</kbd> reiniciar</li>
+                <li><kbd>Z</kbd><kbd>X</kbd> cambios</li>
+                <li><kbd>↓</kbd> freno del.</li>
+                <li><kbd>Espacio</kbd> freno tras.</li>
               </ul>
             )}
-            <p className="hint">
-              Subí de cambio cuando se prende la luz. Frená con el delantero derecho, antes de la curva: inclinado te tira al piso. En la curva, cuerpo hacia adentro.
-            </p>
-            <label className="toggle">
-              <input type="checkbox" checked={assist} onChange={(e) => setAssist(e.target.checked)} id="assist" />
-              <span>Cuerpo asistido cuando no hay giroscopio</span>
-            </label>
-            <p className="sensor">{gyroLabel}</p>
             <button type="button" className="btn-go" onClick={start} autoFocus>Largar</button>
           </div>
         </section>
@@ -215,8 +184,7 @@ export default function App() {
           <div className="panel small">
             <div className="phone-icon" aria-hidden="true" />
             <h2 className="title-sm">Girá el celular</h2>
-            <p className="hint">Se juega apaisado: pulgar izquierdo en el manubrio, derecho en acelerador y frenos.</p>
-            <button type="button" className="btn-ghost" onClick={() => setPortraitOk(true)}>Jugar igual</button>
+                        <button type="button" className="btn-ghost" onClick={() => setPortraitOk(true)}>Jugar igual</button>
           </div>
         </section>
       )}
@@ -225,12 +193,13 @@ export default function App() {
         <section className="overlay center">
           <div className="panel small">
             <h2 className="title-sm">Pausa</h2>
+            <p className="sensor">{gyroLabel}</p>
             {tilt.receiving && (
               <div className="row">
-                <button type="button" className="btn-ghost" onClick={calibrate}>Centrar giroscopio</button>
+                <button type="button" className="btn-ghost" onClick={calibrate}>Centrar</button>
                 <label className="toggle">
                   <input type="checkbox" checked={invert} onChange={(e) => setInvert(e.target.checked)} id="invert" />
-                  <span>Invertir</span>
+                  <span>Invertir giro</span>
                 </label>
               </div>
             )}
@@ -240,8 +209,13 @@ export default function App() {
             </label>
             <label className="toggle">
               <input type="checkbox" checked={!muted} onChange={(e) => setMutedState(!e.target.checked)} id="sound" />
-              <span>Sonido de motor</span>
+              <span>Sonido</span>
             </label>
+            <details className="help">
+              <summary>Cómo se maneja</summary>
+              <p>Pulgar izquierdo: manubrio y cambios (+ / −). Derecho: GAS y frenos. Inclinás el teléfono para mover el cuerpo hacia adentro de la curva.</p>
+              <p>Subí de cambio cuando la marcha se pone azul. El freno DEL frena fuerte pero con la moto inclinada te tira al piso; el TRAS se puede usar en la curva.</p>
+            </details>
             <div className="row">
               <button type="button" className="btn-go" onClick={() => setPaused(false)} autoFocus>Seguir</button>
               <button type="button" className="btn-ghost" onClick={restart}>Reiniciar</button>
@@ -254,14 +228,13 @@ export default function App() {
         <section className="overlay center">
           <div className="panel results">
             <div className="checker-strip" aria-hidden="true" />
-            <p className="eyebrow">Clasificación final · {LAPS} vueltas</p>
-            <h2 className="title-sm">
+                        <h2 className="title-sm">
               {results.findIndex((r) => r.isPlayer) === 0 ? 'Ganaste en Las Toscas' : `Terminaste ${results.findIndex((r) => r.isPlayer) + 1}º`}
             </h2>
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Pos</th><th>Piloto</th><th className="num">Tiempo</th><th className="num">Mejor vuelta</th></tr>
+                  <tr><th>Pos</th><th>Piloto</th><th className="num">Tiempo</th><th className="num col-best">Mejor</th></tr>
                 </thead>
                 <tbody>
                   {results.map((r, i) => (
@@ -274,13 +247,13 @@ export default function App() {
                         {i === 0 ? fmtTime(r.time) : '+' + (r.time - results[0].time).toFixed(3)}
                         {r.estimated ? '*' : ''}
                       </td>
-                      <td className="num">{fmtTime(r.best)}</td>
+                      <td className="num col-best">{fmtTime(r.best)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {results.some((r) => r.estimated) && <p className="foot">* en pista al bajar la bandera, tiempo proyectado</p>}
+            {results.some((r) => r.estimated) && <p className="foot">* tiempo proyectado</p>}
             <p className="foot">
               Tu mejor vuelta: {fmtTime(p.bestLap)} · Caídas: {race.current.crashes}
             </p>

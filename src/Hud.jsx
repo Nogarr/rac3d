@@ -1,11 +1,11 @@
 import { useRef } from 'react'
 import { input } from './input'
-import { LAPS, standings, fmtTime, settings } from './game'
-import { tilt } from './gyro'
+import { LAPS, standings, fmtTime } from './game'
 import { centerline, bounds, S0, sample } from './track'
 
-export const hud = { rows: [], segs: [] }
-const SEGS = 14
+// HUD mínimo: posición, vuelta, marcha (con su color hace de luz de cambio),
+// velocidad y una línea de RPM. Torre, tiempos y minimapa solo en pantallas grandes.
+export const hud = { rows: [] }
 
 function setText(el, v) {
   if (el && el._v !== v) {
@@ -22,7 +22,7 @@ function setClass(el, name, on) {
   }
 }
 
-// --- minimapa ---
+// --- minimapa (solo escritorio) ---
 const line = centerline(10)
 const b = bounds()
 const startPt = sample(S0, {})
@@ -34,10 +34,9 @@ function mapper(w, h, pad) {
   const oz = (h - (b.maxZ - b.minZ) * s) / 2
   return (x, z) => [ox + (x - b.minX) * s, oz + (z - b.minZ) * s]
 }
-
 function drawMap(race) {
   const c = hud.map
-  if (!c || !c.clientWidth) return
+  if (!c || !c.offsetParent) return
   const ctx = c.getContext('2d')
   const w = c.width
   const h = c.height
@@ -73,12 +72,6 @@ function drawMap(race) {
   }
 }
 
-export function bodySource() {
-  if (tilt.receiving) return 'GIRO'
-  if (Math.abs(input.bodyKey) > 0.02) return 'TECLAS'
-  return settings.assist ? 'ASISTIDO' : 'LIBRE'
-}
-
 let tAcc = 0
 let mapAcc = 0
 let blink = 0
@@ -86,41 +79,27 @@ export function updateHud(race, dt) {
   const p = race.player
   blink += dt
   const grid = race.phase === 'grid'
+
   setText(hud.speed, String(Math.round(p.v * 3.6)))
   setText(hud.gear, grid && !p.throttle ? 'N' : String(p.gear))
+  const rpm = Math.min(1, p.rpm)
+  const cut = !grid && (p.limiter || p.rpm > 0.99)
+  const flash = Math.floor(blink * 10) % 2 === 0
+  if (hud.rpm) hud.rpm.style.transform = `scaleX(${rpm.toFixed(3)})`
+  setClass(hud.rpmBox, 'hot', rpm > 0.8)
+  setClass(hud.gearBox, 'shift', !grid && rpm > 0.86 && !cut)
+  setClass(hud.gearBox, 'cut', cut && flash)
 
-  const rpm = Math.min(1.05, p.rpm)
-  const lit = Math.round(Math.min(1, rpm) * SEGS)
-  const cut = p.limiter || rpm > 0.99
-  const flash = cut && Math.floor(blink * 10) % 2 === 0
-  hud.segs.forEach((el, i) => setClass(el, 'on', cut ? flash : i < lit))
-  setClass(hud.shift, 'ready', !grid && rpm > 0.86 && !cut)
-  setClass(hud.shift, 'cut', !grid && cut && flash)
-
-  setClass(hud.bFront, 'on', !!p.front)
-  setClass(hud.bRear, 'on', !!p.rear)
-  const danger = p.frontLoad > 0.2
-  setClass(hud.bFront, 'danger', danger && Math.floor(blink * 12) % 2 === 0)
-
-  // medidor de cuerpo: marcador del piloto y zona ideal
-  if (hud.bodyDot) hud.bodyDot.style.transform = `translateX(${(p.body * 50).toFixed(1)}%)`
-  if (hud.bodyIdeal) hud.bodyIdeal.style.transform = `translateX(${(race.idealBody * 50).toFixed(1)}%)`
-  setText(hud.bodySrc, bodySource())
-  if (hud.bar) hud.bar.style.transform = `rotate(${(input.steer * 26).toFixed(1)}deg)`
-
-  const lap = Math.min(LAPS, Math.max(1, p.lapIdx + 1))
-  setText(hud.lap, String(lap))
+  setText(hud.pos, String(standings(race).indexOf(p) + 1))
+  setText(hud.lap, String(Math.min(LAPS, Math.max(1, p.lapIdx + 1))))
   setText(hud.time, fmtTime(grid ? 0 : race.time))
   setText(hud.best, isFinite(p.bestLap) ? fmtTime(p.bestLap) : '—')
 
-  const st = standings(race)
-  setText(hud.pos, String(st.indexOf(p) + 1))
-
+  // un solo aviso a la vez, solo cuando importa
   let warn = ''
-  if (!grid && !p.finished) {
-    if (p.crash > 0) warn = ''
-    else if (danger) warn = '¡SE VA EL TREN DELANTERO!'
-    else if (p.offroad) warn = 'GRAVA · VOLVÉ AL ASFALTO'
+  if (!grid && !p.finished && p.crash <= 0) {
+    if (p.frontLoad > 0.2) warn = 'SOLTÁ EL DELANTERO'
+    else if (p.offroad) warn = 'GRAVA'
   }
   setText(hud.warn, warn)
   setClass(hud.warn, 'show', warn !== '')
@@ -132,11 +111,15 @@ export function updateHud(race, dt) {
   setClass(hud.count, 'go', count === '¡YA!')
 
   setText(hud.toast, race.toast.t > 0 ? race.toast.text : '')
-  setClass(hud.toast, 'show', race.toast.t > 0)
+  setClass(hud.toast, 'show', race.toast.t > 0 && warn === '')
 
+  if (hud.bar) hud.bar.style.transform = `rotate(${(input.steer * 26).toFixed(1)}deg)`
+
+  // extras de escritorio
   tAcc += dt
-  if (tAcc > 0.2) {
+  if (tAcc > 0.25 && hud.rows[0]?.el?.offsetParent) {
     tAcc = 0
+    const st = standings(race)
     const leader = st[0]
     st.forEach((r, i) => {
       const row = hud.rows[i]
@@ -166,66 +149,51 @@ const rowRef = (i, key) => (e) => {
   hud.rows[i][key] = e
 }
 
-export function Hud({ visible }) {
+export function Hud({ visible, onPause }) {
   return (
-    <div className={'hud' + (visible ? '' : ' is-hidden')} aria-hidden={!visible}>
-      <div className="hud-pos">
-        <span className="hud-label">POS</span>
-        <span className="hud-pos-num" ref={(e) => (hud.pos = e)}>4</span>
-        <span className="hud-pos-of">/6</span>
+    <div className={'hud' + (visible ? '' : ' is-hidden')}>
+      <div className="hud-race" aria-label="Posición y vuelta">
+        <span className="pos">
+          P<b ref={(e) => (hud.pos = e)}>4</b>
+        </span>
+        <span className="lap">
+          <b ref={(e) => (hud.lap = e)}>1</b>/{LAPS}
+        </span>
       </div>
 
-      <div className="hud-lap">
-        <div className="hud-lap-main">
-          <span className="hud-label">VUELTA</span>
-          <span className="hud-lap-num"><span ref={(e) => (hud.lap = e)}>1</span>/{LAPS}</span>
-        </div>
-        <div className="hud-times">
-          <span className="hud-label">TIEMPO</span>
-          <span ref={(e) => (hud.time = e)}>0:00.000</span>
-          <span className="hud-label">MEJOR</span>
-          <span ref={(e) => (hud.best = e)}>—</span>
-        </div>
+      <button type="button" className="hud-pause" onClick={onPause} aria-label="Pausa">
+        <span />
+        <span />
+      </button>
+
+      <div className="hud-gauge" ref={(e) => (hud.gearBox = e)}>
+        <span className="gauge-gear" ref={(e) => (hud.gear = e)}>N</span>
+        <span className="gauge-speed">
+          <b ref={(e) => (hud.speed = e)}>0</b> km/h
+        </span>
+        <span className="gauge-rpm" ref={(e) => (hud.rpmBox = e)}>
+          <i ref={(e) => (hud.rpm = e)} />
+        </span>
       </div>
 
-      <ol className="tower">
-        {Array.from({ length: 6 }, (_, i) => (
-          <li key={i} ref={rowRef(i, 'el')}>
-            <span className="tw-pos">{i + 1}</span>
-            <span className="tw-num" ref={rowRef(i, 'num')} />
-            <span className="tw-name" ref={rowRef(i, 'name')} />
-            <span className="tw-gap" ref={rowRef(i, 'gap')} />
-          </li>
-        ))}
-      </ol>
-
-      <canvas className="minimap" width={300} height={380} ref={(e) => (hud.map = e)} />
-
-      <div className="dash">
-        <div className="rpm">
-          {Array.from({ length: SEGS }, (_, i) => (
-            <span key={i} className={'seg ' + (i < 8 ? 'g' : i < 12 ? 'a' : 'r')} ref={(e) => (hud.segs[i] = e)} />
+      <div className="hud-desk">
+        <div className="desk-times">
+          <span>TIEMPO</span>
+          <b ref={(e) => (hud.time = e)}>0:00.000</b>
+          <span>MEJOR</span>
+          <b ref={(e) => (hud.best = e)}>—</b>
+        </div>
+        <ol className="tower">
+          {Array.from({ length: 6 }, (_, i) => (
+            <li key={i} ref={rowRef(i, 'el')}>
+              <span className="tw-pos">{i + 1}</span>
+              <span className="tw-num" ref={rowRef(i, 'num')} />
+              <span className="tw-name" ref={rowRef(i, 'name')} />
+              <span className="tw-gap" ref={rowRef(i, 'gap')} />
+            </li>
           ))}
-        </div>
-        <div className="dash-main">
-          <div className="gear">
-            <span className="shift-light" ref={(e) => (hud.shift = e)} aria-hidden="true" />
-            <span className="gear-num" ref={(e) => (hud.gear = e)}>N</span>
-          </div>
-          <div className="speed"><span ref={(e) => (hud.speed = e)}>0</span><small>km/h</small></div>
-          <div className="brakes">
-            <span className="brake" ref={(e) => (hud.bFront = e)}>DEL</span>
-            <span className="brake" ref={(e) => (hud.bRear = e)}>TRAS</span>
-          </div>
-        </div>
-        <div className="body-meter">
-          <span className="hud-label">CUERPO</span>
-          <span className="body-track">
-            <span className="body-ideal" ref={(e) => (hud.bodyIdeal = e)} />
-            <span className="body-dot" ref={(e) => (hud.bodyDot = e)} />
-          </span>
-          <span className="body-src" ref={(e) => (hud.bodySrc = e)}>ASISTIDO</span>
-        </div>
+        </ol>
+        <canvas className="minimap" width={280} height={360} ref={(e) => (hud.map = e)} />
       </div>
 
       <div className="count" ref={(e) => (hud.count = e)} />
@@ -237,7 +205,7 @@ export function Hud({ visible }) {
 
 // ---------- Controles táctiles ----------
 
-function Hold({ k, label, sub, className }) {
+function Hold({ k, label, className }) {
   const on = (e) => {
     e.preventDefault()
     input[k] = true
@@ -255,23 +223,24 @@ function Hold({ k, label, sub, className }) {
     <button
       type="button"
       className={'pad ' + (className || '')}
+      aria-label={label}
       onPointerDown={on}
       onPointerUp={off}
       onPointerCancel={off}
       onLostPointerCapture={off}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <span>{label}</span>
-      {sub && <small>{sub}</small>}
+      {label}
     </button>
   )
 }
 
-function Tap({ onTap, label, className }) {
+function Tap({ onTap, label, aria, className }) {
   return (
     <button
       type="button"
       className={'pad ' + (className || '')}
+      aria-label={aria}
       onPointerDown={(e) => {
         e.preventDefault()
         e.currentTarget.classList.add('pressed')
@@ -329,10 +298,7 @@ function Handlebar() {
         <rect x="6" y="30" width="46" height="18" rx="7" fill="#15181f" />
         <rect x="188" y="30" width="46" height="18" rx="7" fill="#15181f" />
         <rect x="108" y="26" width="24" height="26" rx="4" fill="#ffb000" />
-        <rect x="58" y="22" width="18" height="6" rx="2" fill="#c7ccd8" transform="rotate(-12 67 25)" />
-        <rect x="164" y="22" width="18" height="6" rx="2" fill="#c7ccd8" transform="rotate(12 173 25)" />
       </svg>
-      <span className="steer-hint">MANUBRIO</span>
     </div>
   )
 }
@@ -343,18 +309,17 @@ export function TouchControls({ visible }) {
     <div className="touch">
       <div className="touch-left">
         <div className="shifter">
-          <Tap label="▲" className="pad-shift" onTap={() => input.shifts.push(1)} />
-          <span className="shifter-label">CAMBIO</span>
-          <Tap label="▼" className="pad-shift" onTap={() => input.shifts.push(-1)} />
+          <Tap label="+" aria="Subir cambio" className="pad-shift" onTap={() => input.shifts.push(1)} />
+          <Tap label="−" aria="Bajar cambio" className="pad-shift" onTap={() => input.shifts.push(-1)} />
         </div>
         <Handlebar />
       </div>
       <div className="touch-right">
         <div className="brake-col">
-          <Hold k="front" label="DEL" sub="freno" className="pad-front" />
-          <Hold k="rear" label="TRAS" sub="freno" className="pad-rear" />
+          <Hold k="front" label="DEL" className="pad-front" />
+          <Hold k="rear" label="TRAS" className="pad-rear" />
         </div>
-        <Hold k="throttle" label="ACEL" className="pad-gas" />
+        <Hold k="throttle" label="GAS" className="pad-gas" />
       </div>
     </div>
   )
