@@ -282,8 +282,8 @@ function Hills() {
 
 function Ground() {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[150, 0, 0]} receiveShadow>
-      <planeGeometry args={[4000, 4000]} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[150, -0.12, 0]} receiveShadow>
+      <planeGeometry args={[4000, 4000, 64, 64]} />
       <meshStandardMaterial color="#5b7a3a" roughness={1} />
     </mesh>
   )

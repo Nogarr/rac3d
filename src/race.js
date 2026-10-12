@@ -3,6 +3,7 @@ import { input } from './input'
 import { BIKES, bestDrive, dragAcc, topSpeed } from './bikes'
 import { createRider, stepBike, shiftRider, forceCrash } from './physics'
 import { readControls, toast, fmtTime, wrapAngle } from './shared'
+import { bikePacket, applyBikePacket, stepRemoteBike } from './remote'
 
 export const LAPS = 3
 export const TRACK_KM = (L / 1000).toFixed(2).replace('.', ',')
@@ -15,47 +16,69 @@ const RIVALS = [
   { name: 'L. Ojeda', num: 21, color: '#ff8a1a', suit: '#1c1c1e', skill: 0.95, bias: -0.4 },
   { name: 'N. Sosa', num: 64, color: '#8d5bd8', suit: '#efe9dc', skill: 0.94, bias: 0.2 },
 ]
-const GRID_ORDER = [0, 1, 2, 'player', 3, 4]
+const OFFLINE_GRID = [0, 1, 2, 'self', 3, 4]
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v)
 const smp = {}
 const prj = {}
 let raceId = 0
 
-export function createRace(bikeId) {
-  const bike = BIKES[bikeId] || BIKES.dominar
-  const vTop = topSpeed(bike)
-  const racers = GRID_ORDER.map((who, i) => {
+/**
+ * opts (online): { humans: [{id, name, bike, color, num}], selfId, authority, aiFill }
+ * Sin opts es la carrera de un jugador contra 5 rivales.
+ */
+export function createRace(bikeId, opts = null) {
+  const hostBike = BIKES[bikeId] || BIKES.dominar
+  const online = !!opts
+  const humans = online
+    ? opts.humans
+    : [{ id: 'me', name: 'Vos', bike: hostBike.id, color: hostBike.look.color, num: 77 }]
+  const selfId = online ? opts.selfId : 'me'
+  let grid
+  if (online) {
+    const fill = opts.aiFill ? Math.max(0, 6 - humans.length) : 0
+    grid = [...humans.map((h) => ({ human: h })), ...RIVALS.slice(0, fill).map((r, k) => ({ rival: r, k }))]
+  } else {
+    grid = OFFLINE_GRID.map((w) => (w === 'self' ? { human: humans[0] } : { rival: RIVALS[w], k: w }))
+  }
+  const vTop = topSpeed(hostBike)
+  const racers = grid.map((slot, i) => {
     const row = Math.floor(i / 2)
     const col = i % 2
     const total = -8 - row * 9 - col * 4
     const d = col ? 3 : -3
-    if (who === 'player') {
-      sample(total + S0, smp)
+    sample(total + S0, smp)
+    if (slot.human) {
+      const h = slot.human
+      const bike = BIKES[h.bike] || hostBike
       const p = createRider(bike, smp.x + smp.rx * d, smp.z + smp.rz * d, Math.atan2(smp.tx, smp.tz))
       return Object.assign(p, {
-        id: i, isPlayer: true, name: 'Vos', num: 77, color: bike.look.color, suit: '#1b2238',
+        id: h.id, isPlayer: h.id === selfId, isRemote: h.id !== selfId, human: true,
+        name: h.id === selfId && !online ? 'Vos' : h.name, num: h.num, color: h.color, suit: '#1b2238',
         total, d, idx: -1, finished: false, finishTime: 0,
         lapIdx: -1, lapStart: 0, lapTimes: [], bestLap: Infinity, offroad: false,
       })
     }
-    const r = RIVALS[who]
+    const r = slot.rival
     return {
-      ...r, bike, id: i, isPlayer: false,
+      ...r, bike: hostBike, id: 'ai' + slot.k, isPlayer: false,
       vmax: vTop * r.skill,
-      grip: 9.81 * Math.tan(bike.leanLimit + 0.1) * (0.86 + (r.skill - 0.94) * 1.2),
+      grip: 9.81 * Math.tan(hostBike.leanLimit + 0.1) * (0.86 + (r.skill - 0.94) * 1.2),
       total, d, v: 0, vd: 0, latVel: 0, steer: 0, lean: 0, body: 0, yaw: 0, x: 0, z: 0,
       throttle: 0, braking: 0, gear: 1, rpm: 0.15, crash: 0,
       finished: false, finishTime: 0, lapIdx: -1, lapStart: 0, lapTimes: [], bestLap: Infinity,
       offroad: false, wobble: Math.random() * 10,
     }
   })
+  const player = racers.find((r) => r.isPlayer)
   const race = {
     mode: 'race',
+    online,
+    authority: online ? !!opts.authority : true,
     id: ++raceId,
-    bike,
+    bike: player.bike,
     racers,
-    player: racers.find((r) => r.isPlayer),
+    player,
     running: false,
     phase: 'grid',
     countdown: 3.6,
@@ -68,9 +91,9 @@ export function createRace(bikeId) {
     crashes: 0,
     idealBody: 0,
   }
-  racers.forEach((r) => !r.isPlayer && placeAI(r))
-  project(race.player.x, race.player.z, -1, prj)
-  race.player.idx = prj.idx
+  racers.forEach((r) => !r.human && placeAI(r))
+  project(player.x, player.z, -1, prj)
+  player.idx = prj.idx
   return race
 }
 
@@ -181,8 +204,9 @@ function driveAI(r, race, dt) {
 
   let vT = Math.min(r.vmax, Math.sqrt(r.grip / Math.max(ahead, 1e-4)))
   if (r.finished) vT = Math.min(vT, 20)
-  if (!r.finished && !race.player.finished) {
-    const diff = r.total - race.player.total
+  const lead = race.racers.reduce((m, q) => (q.human && !q.finished ? Math.max(m, q.total) : m), -Infinity)
+  if (!r.finished && lead > -Infinity) {
+    const diff = r.total - lead
     vT *= diff > 100 ? 0.95 : diff < -120 ? 1.04 : 1
   }
   if (r.v < vT) r.v += Math.max(0, bestDrive(b, r.v) - dragAcc(b, r.v)) * dt
@@ -213,6 +237,7 @@ function collisions(race) {
     for (let j = i + 1; j < rs.length; j++) {
       const a = rs[i], c = rs[j]
       if (a.crash > 0 || c.crash > 0) continue
+      if (!a.isPlayer && !c.isPlayer && (!race.authority || a.isRemote || c.isRemote)) continue
       const dz = a.total - c.total
       if (Math.abs(dz) > 2.2) continue
       const dd = a.d - c.d
@@ -226,13 +251,13 @@ function collisions(race) {
           r.z += prj.rz * sg * push
           r.d += sg * push
           r.lean += sg * 0.05
-        } else {
+        } else if (!r.isRemote && race.authority) {
           r.d += sg * push
           r.vd += sg * 1.5
         }
       }
       const behind = dz > 0 ? c : a
-      behind.v *= 0.985
+      if (behind.isPlayer || (!behind.isRemote && race.authority)) behind.v *= 0.985
       if (a === p || c === p) race.shake = Math.max(race.shake, 0.25)
     }
   }
@@ -278,14 +303,16 @@ export function stepRace(race, dt) {
     return
   }
   race.time += dt
+  if (race.online) race.racers.forEach((r) => r.gone && (r.v = 0))
   for (const r of race.racers) {
     if (r.isPlayer) drivePlayer(r, race, dt)
+    else if (r.human || !race.authority) stepRemoteBike(r, dt)
     else driveAI(r, race, dt)
   }
   collisions(race)
   for (const r of race.racers) {
-    if (!r.isPlayer) placeAI(r)
-    laps(r, race)
+    if (!r.human && race.authority) placeAI(r)
+    if (r.isPlayer || (!r.human && race.authority)) laps(r, race)
   }
   if (race.finishAt !== null && race.time >= race.finishAt && !race.finishSent) {
     race.finishSent = true
@@ -294,7 +321,7 @@ export function stepRace(race, dt) {
 }
 
 export function standings(race) {
-  return [...race.racers].sort((a, b) => {
+  return race.racers.filter((r) => !r.gone).sort((a, b) => {
     if (a.finished && b.finished) return a.finishTime - b.finishTime
     if (a.finished) return -1
     if (b.finished) return 1
@@ -303,7 +330,7 @@ export function standings(race) {
 }
 
 export function getResults(race) {
-  const list = race.racers.map((r) => ({
+  const list = race.racers.filter((r) => !r.gone).map((r) => ({
     id: r.id,
     name: r.name,
     num: r.num,
@@ -315,4 +342,31 @@ export function getResults(race) {
   }))
   list.sort((a, b) => a.time - b.time)
   return list
+}
+
+// ---------- red ----------
+// Host: estado de todas las motos (incluida la propia y las de los demás, que reenvía)
+export function raceSnapshot(race) {
+  return { type: 'snap', t: Math.round(race.time * 100) / 100, rs: race.racers.filter((r) => !r.gone).map(bikePacket) }
+}
+export function selfPacket(race) {
+  return { type: 'me', p: bikePacket(race.player) }
+}
+export function applyRaceSnapshot(race, snap) {
+  const ids = new Set()
+  for (const p of snap.rs) {
+    ids.add(p.i)
+    const r = race.racers.find((q) => q.id === p.i)
+    if (r && !r.isPlayer) applyBikePacket(r, p)
+  }
+  // los que el host ya no manda se desconectaron
+  for (const r of race.racers) if (r.isRemote && !ids.has(r.id)) r.gone = true
+}
+export function applyRemotePlayer(race, id, p) {
+  const r = race.racers.find((q) => q.id === id)
+  if (r && r.isRemote) applyBikePacket(r, p)
+}
+export function markGone(race, id) {
+  const r = race.racers.find((q) => q.id === id)
+  if (r) r.gone = true
 }

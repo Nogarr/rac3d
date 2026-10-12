@@ -265,6 +265,41 @@ tr.me td { background: rgba(255, 176, 0, 0.16); color: var(--amber); }
   .keys { display: none; }
 }
 
+/* ---------- sala online ---------- */
+.lobby { max-width: min(560px, 100%); }
+.lobby-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.field { display: grid; gap: 4px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--steel); }
+.field input {
+  font: inherit; font-size: clamp(16px, 4.4vmin, 20px); font-weight: 700; letter-spacing: 0.06em; text-transform: none;
+  color: var(--chalk); background: rgba(16, 21, 40, 0.8); border: 2px solid rgba(255, 255, 255, 0.25);
+  padding: 8px 10px; min-width: 0; width: 100%; box-sizing: border-box; border-radius: 0;
+  -webkit-user-select: text; user-select: text;
+}
+.field input:focus { outline: none; border-color: var(--amber); }
+#join-code { text-transform: uppercase; letter-spacing: 0.3em; max-width: 9em; }
+.join-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.invite { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.qr { width: clamp(96px, 26vmin, 150px); height: auto; image-rendering: pixelated; border: 4px solid var(--chalk); }
+.invite-text { display: grid; gap: 6px; justify-items: start; }
+.hud-label-sm { font-size: 0.7rem; letter-spacing: 0.16em; color: var(--steel); font-weight: 700; }
+.room-code { font-family: var(--display); font-size: clamp(34px, 11vmin, 56px); line-height: 1; letter-spacing: 0.08em; color: var(--amber); }
+.btn-ghost.small { min-height: 32px; padding: 4px 12px; font-size: 0.8rem; }
+.roster { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.roster li {
+  display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+  background: rgba(16, 21, 40, 0.72); border-left: 4px solid var(--c); padding: 5px 10px; font-weight: 700;
+}
+.roster-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-bike { color: var(--steel); font-size: 0.88rem; white-space: nowrap; }
+.lobby-opts { display: flex; gap: 10px 18px; align-items: center; flex-wrap: wrap; }
+.seg-btn:disabled { cursor: default; }
+.seg-btn:disabled:not(.on) { opacity: 0.5; }
+.bikes.compact .bike-card { padding: 6px 8px; }
+.net-status { margin: 0; color: var(--amber); font-weight: 700; font-size: 0.95rem; }
+.waiting { margin: 0; color: var(--steel); font-weight: 700; }
+.link-btn { justify-self: start; background: none; border: 0; padding: 4px 0; color: var(--steel); text-decoration: underline; font-weight: 600; }
+.btn-go:disabled, .btn-ghost:disabled { opacity: 0.45; cursor: default; }
+
 /* Pantallas bajas (celular apaisado): todo más compacto */
 @media (max-height: 460px) {
   .results .col-best { display: none; }

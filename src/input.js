@@ -45,7 +45,12 @@ export function updateAnalog(dt) {
 }
 
 export function bindKeyboard(onCommand) {
+  const typing = (e) => {
+    const t = e.target
+    return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+  }
   const down = (e) => {
+    if (typing(e)) return
     const k = KEYMAP[e.code]
     if (k) {
       input[k] = true

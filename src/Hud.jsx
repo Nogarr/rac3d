@@ -116,6 +116,23 @@ function drawRadar(st) {
     ctx.arc(R + x * R, R + y * R, w / 16, 0, Math.PI * 2)
     ctx.fill()
   }
+  // compañeros
+  for (const q of st.players || []) {
+    if (q === p || q.gone) continue
+    const dx = q.x - p.x
+    const dz = q.z - p.z
+    let x = -(dx * -cs + dz * sn) / range
+    let y = -(dx * sn + dz * cs) / range
+    const m = Math.hypot(x, y)
+    if (m > 0.92) {
+      x *= 0.92 / m
+      y *= 0.92 / m
+    }
+    ctx.fillStyle = q.busted ? '#6b7280' : q.color
+    ctx.beginPath()
+    ctx.arc(R + x * R, R + y * R, w / 22, 0, Math.PI * 2)
+    ctx.fill()
+  }
   ctx.fillStyle = '#ffb000'
   ctx.beginPath()
   ctx.moveTo(R, R - w / 11)

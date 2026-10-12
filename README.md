@@ -18,6 +18,32 @@ npm run movil
 
 Si Windows pregunta por el firewall al correr `npm run movil`, permití el acceso en redes privadas.
 
+## Jugar online con amigos
+
+Un celular hostea la sala y los demás se conectan directo a él por WebRTC (P2P). Funciona en el mismo Wi-Fi y también por internet.
+
+1. Subí el juego a una URL con HTTPS, por ejemplo con Vercel conectado al repo: framework Vite, build `npm run build`, salida `dist`. Todos tienen que abrir esa URL.
+2. El que hostea toca **Con amigos → Crear sala**. Aparecen un código de 4 letras, un QR y un botón para copiar el link de invitación.
+3. Los demás escanean el QR o abren el link, que ya trae `?sala=CÓDIGO`. También pueden escribir el código a mano. Después tocan **Unirme**.
+4. Cada uno elige su moto. El host elige el modo y, en Carrera, si se completa la grilla con rivales IA. Después toca **Largar**.
+
+Qué hace cada uno:
+- **Host:** decide la largada y simula los rivales IA, el tráfico y la policía.
+- **Cada celular:** calcula la física de su propia moto, así manejar no tiene lag. Manda su estado 20 veces por segundo y el host reenvía el de todos 15 veces por segundo.
+
+Modos online:
+- **Carrera:** hasta 6 pilotos, cada uno con su moto.
+- **Escape en equipo:** la policía persigue a todos.
+  - Si ningún patrullero ve a nadie del grupo durante 15 s, escapan todos.
+  - Al que acorralan casi quieto lo atrapan y queda afuera.
+  - Si atrapan a todos, pierden.
+  - En el radar se ve a los compañeros.
+
+Notas:
+- **Servidor de salas:** solo se usa al conectarse. Por defecto es el público y gratuito de PeerJS. Si alguna vez falla, podés levantar el tuyo con el paquete `peer` y configurarlo en `.env` (ver `.env.example`).
+- **Datos móviles:** con 4G/5G algunas operadoras no permiten la conexión directa. Si a alguien no le conecta, configurá un servidor TURN en `.env`; hay planes gratis, por ejemplo en Metered o Cloudflare.
+- **Host:** no pongas el juego en pausa: la partida online sigue corriendo. Si el host se va, la sala se cierra.
+
 ## Otros comandos
 
 ```bash
@@ -95,6 +121,9 @@ La física sale directo de la ficha de cada moto:
 - `src/Scene.jsx`: el loop del juego y la cámara.
 - `src/Bike.jsx`: las 4 motos paramétricas y el piloto que se cuelga en las curvas.
 - `src/audio.js`: el motor monocilíndrico sintetizado según las RPM reales de cada moto y la sirena.
+- `src/net.js`: las salas P2P con PeerJS (crear y unirse, lobby, desconexiones).
+- `src/netsync.js` y `src/remote.js`: los paquetes de estado, los snapshots del host y la interpolación de las motos y vehículos remotos.
+- `src/Lobby.jsx`: la pantalla de sala con QR, la lista de pilotos y la elección de moto y modo.
 
 ## Ajustes rápidos
 

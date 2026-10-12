@@ -10,6 +10,7 @@ import { updateHud } from './Hud'
 import { updateAnalog } from './input'
 import { updateTilt } from './gyro'
 import { updateAudio, updateSiren } from './audio'
+import { netTick } from './netsync'
 
 const MOON = new THREE.Vector3(0.5, 0.55, -0.65).normalize()
 const desired = new THREE.Vector3()
@@ -32,7 +33,9 @@ function Loop({ state, paused, onEvent, phase }) {
     const city = st.mode === 'chase'
     updateAnalog(dt)
     updateTilt()
-    if (!paused.current) (city ? stepChase : stepRace)(st, dt)
+    // online no se pausa: la carrera sigue para todos
+    if (!paused.current || st.online) (city ? stepChase : stepRace)(st, dt)
+    netTick(st, dt)
     while (st.events.length) onEvent.current(st.events.shift())
 
     const p = st.player
@@ -74,7 +77,7 @@ function Loop({ state, paused, onEvent, phase }) {
     }
 
     updateHud(st, dt)
-    const live = st.running && !paused.current && mode !== 'finished'
+    const live = st.running && (!paused.current || st.online) && mode !== 'finished'
     updateAudio(Math.min(1.05, p.rpm), p.throttle, live && p.crash <= 0, p.bike.redline)
     if (city) updateSiren(st.nearestCop, live && st.phase === 'race' && st.police.some((c) => c.active))
   }, -1)
@@ -100,7 +103,7 @@ function Loop({ state, paused, onEvent, phase }) {
 
 export function Scene({ state, paused, onEvent, phase }) {
   const st = state.current
-  const riders = st.mode === 'race' ? st.racers : [st.player]
+  const riders = st.mode === 'race' ? st.racers : st.players
   return (
     <>
       {st.mode === 'race' ? <TrackWorld race={state} /> : <CityWorld st={state} />}

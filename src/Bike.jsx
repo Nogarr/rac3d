@@ -148,6 +148,7 @@ export function Bike({ racer, suit }) {
 
   useFrame((_, dt) => {
     if (!root.current) return
+    root.current.visible = !racer.gone
     root.current.position.set(racer.x, 0, racer.z)
     root.current.rotation.y = racer.yaw
     lean.current.rotation.z = racer.lean
